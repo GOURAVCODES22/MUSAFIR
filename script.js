@@ -626,18 +626,25 @@ function smoothZoom(targetDist){
   });
 }
 
+function getHomeCamDist(){
+  const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+  return aspect < 1 ? (6.4 / aspect) * 0.62 : 6.4;
+}
+
 function setRotateMode(on){
   rotateMode = !!on;
-  canvas.style.touchAction = 'none';
+  // Normal mode: the globe is display-only and page scrolling stays natural.
+  // Explore mode: touch gestures are captured by the globe.
+  canvas.style.touchAction = rotateMode ? 'none' : 'auto';
   const badge = document.getElementById('rotateBadge');
   if(badge){
     badge.textContent = rotateMode
-      ? '✨ Explore mode • Tap a country • Pinch to zoom'
+      ? '✨ Explore mode • Drag • Pinch zoom • Tap a country'
       : '👆 Double-tap to explore';
   }
 }
-// Normal mode: the globe may be dragged/rotated, but a single tap NEVER opens a country.
-// Explore mode is deliberately unlocked only by a double-tap.
+// The globe starts in automatic-rotation mode. Nothing on it responds to a
+// single touch/drag until the user double-taps.
 setRotateMode(false);
 
 function unlockExplore(){
@@ -645,6 +652,16 @@ function unlockExplore(){
   setRotateMode(true);
   autoRotate = false;
   smoothZoom(Math.max(3.8, camDist - 0.8));
+}
+
+function lockExplore(){
+  if(flying) return;
+  setRotateMode(false);
+  autoRotate = true;
+  dragging = false;
+  pinchStartDist = null;
+  velX = velY = 0;
+  smoothZoom(getHomeCamDist());
 }
 
 function startDrag(e){
@@ -663,18 +680,21 @@ function startDrag(e){
 
 canvas.addEventListener('pointerdown', (e)=>{
   const now = performance.now();
-  const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
   const isDoubleTap = now - lastTapTime < 360;
-
-  // Double-tap is the only gesture that unlocks zoom/country selection.
-  if(isDoubleTap && isTouch){
-    unlockExplore();
-  } else if(isDoubleTap && e.pointerType === 'mouse'){
-    unlockExplore();
-  }
   lastTapTime = now;
 
-  // Rotation is always available; exploration is not.
+  // Double-tap is the ONLY way to toggle globe controls.
+  if(isDoubleTap){
+    if(rotateMode) lockExplore();
+    else unlockExplore();
+    // Do not let the second tap also begin a drag.
+    dragging = false;
+    activePointerId = null;
+    return;
+  }
+
+  // In normal mode the globe only auto-rotates; a single touch cannot move it.
+  if(!rotateMode) return;
   startDrag(e);
 }, {passive:true});
 
@@ -707,12 +727,13 @@ canvas.addEventListener('pointerup', (e)=>{
       applyDelta(vx*p*0.8,vy*p*0.8);
     }});
   }
-  setTimeout(()=>{ if(!dragging) autoRotate=true; },1800);
+  // Stay in manual Explore mode until the user double-taps again.
+  if(!rotateMode){ autoRotate = true; }
 }, {passive:true});
 
 canvas.addEventListener('pointercancel', ()=>{
   dragging=false; activePointerId=null;
-  setTimeout(()=>{ if(!dragging) autoRotate=true; },1000);
+  if(!rotateMode) autoRotate=true;
 });
 
 // Pinch and wheel zoom are intentionally disabled until explore mode is unlocked.
@@ -738,7 +759,10 @@ canvas.addEventListener('touchmove',(e)=>{
 },{passive:false});
 
 canvas.addEventListener('touchend',(e)=>{
-  if(e.touches.length<2){ pinchStartDist=null; setTimeout(()=>{if(!dragging)autoRotate=true;},1400); }
+  if(e.touches.length<2){
+    pinchStartDist=null;
+    if(!rotateMode) autoRotate=true;
+  }
 },{passive:true});
 
 canvas.addEventListener('wheel',(e)=>{
@@ -747,12 +771,11 @@ canvas.addEventListener('wheel',(e)=>{
   smoothZoom(camDist + e.deltaY*0.0045);
 },{passive:false});
 
-// Badge can also unlock exploration, but ordinary tapping the globe cannot.
+// The badge is only an instruction now; globe controls are toggled by double-tap.
 const rotateBadge = document.getElementById('rotateBadge');
 if(rotateBadge){
   rotateBadge.addEventListener('click',(e)=>{
     e.preventDefault();
-    unlockExplore();
   });
 }
 
