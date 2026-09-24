@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Musafir — Review moderation</title>
+<style>
+:root{--gold:#d4af6a;--ink:#eef2f8;--dim:#9aabc2;--line:rgba(238,242,248,.14)}
+*{box-sizing:border-box}body{margin:0;background:#020810;color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;padding:24px 16px 60px}
+main{max-width:760px;margin:0 auto}h1{font-size:1.3rem;color:var(--gold);letter-spacing:.06em}h2{font-size:1rem;margin:28px 0 10px;color:var(--gold)}
+.box,.card{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+input{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font:inherit;width:100%;max-width:280px}
+button{border:0;border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer;background:var(--gold);color:#04140f;margin-right:8px}
+button.no{background:transparent;color:#ff8a80;border:1px solid #ff8a80}.meta{color:var(--dim);font-size:.82rem}.st{color:var(--gold)}
+.ph{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.ph img{height:90px;border-radius:8px}p{margin:6px 0 10px}
+</style></head><body><main>
+<h1>MUSAFIR · REVIEW MODERATION</h1>
+<div class="box"><input id="pw" type="password" placeholder="Admin password"> <button id="go">Open</button><span id="err" class="meta"></span></div>
+<div id="out"></div>
+</main>
+<script>
+const $=id=>document.getElementById(id); let PW=localStorage.getItem('mus_admin')||'';
+if(location.hash.length>1){PW=decodeURIComponent(location.hash.slice(1));history.replaceState(null,'',location.pathname);}
+const api=(u,o={})=>fetch(u,{...o,headers:{'x-admin-token':PW,'Content-Type':'application/json'}});
+function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function item(r,btns){const c=el('div','card');
+  c.append(el('div','st','★'.repeat(r.rating)+'☆'.repeat(5-r.rating)),el('b',0,r.name+(r.place?' · '+r.place:'')),el('p',0,r.text));
+  if(r.photos){const p=el('div','ph');for(let i=0;i<r.photos;i++){const a=el('a');a.href='/api/reviews?photo='+r.id+'&i='+i;a.target='_blank';const im=new Image();im.src=a.href;a.append(im);p.append(a)}c.append(p)}
+  c.append(el('div','meta',new Date(r.ts).toLocaleString()));const row=el('div');row.style.marginTop='10px';
+  btns.forEach(([t,act,cls])=>{const b=el('button',cls,t);b.onclick=async()=>{b.disabled=true;await api('/api/reviews?action='+act,{method:'POST',body:JSON.stringify({id:r.id})});load()};row.append(b)});
+  c.append(row);return c}
+async function load(){
+  const r=await api('/api/reviews?admin=1'); if(!r.ok){$('err').textContent=r.status===401?' Wrong password':' Could not load';return}
+  localStorage.setItem('mus_admin',PW);$('err').textContent='';const d=await r.json(),o=$('out');o.replaceChildren();
+  o.append(el('h2',0,'Waiting for approval ('+d.pending.length+')'));
+  d.pending.forEach(x=>o.append(item(x,[['Approve','approve'],['Reject','reject','no']])));
+  if(!d.pending.length)o.append(el('div','meta','Nothing pending.'));
+  o.append(el('h2',0,'Live on site ('+d.approved.length+')'));
+  d.approved.forEach(x=>o.append(item(x,[['Remove','delete','no']])));
+}
+$('go').onclick=()=>{PW=$('pw').value;load()};$('pw').onkeydown=e=>{if(e.key==='Enter')$('go').click()};if(PW)load();
+</script></body></html>
